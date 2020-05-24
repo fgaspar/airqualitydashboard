@@ -28,6 +28,7 @@ class Pm5003 (object):
         time.sleep(0.1)
         GPIO.output(reset_pin, GPIO.HIGH)
         self._previous_read_time = None
+        #TODO use passive mode
     
     def read_data(self):
         time_now = time.time()

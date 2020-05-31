@@ -5,9 +5,9 @@ import serial
 import struct
 import time
 
-PM5003_SEQ_START = bytearray(b'\x42\x4d')
+PMS5003_SEQ_START = bytearray(b'\x42\x4d')
 
-PM5003_MIN_PERIOD = 3
+PMS5003_MIN_PERIOD = 3
 
 
 class CommunicationTimeoutError(RuntimeError):
@@ -15,7 +15,7 @@ class CommunicationTimeoutError(RuntimeError):
 class CheckError(RuntimeError):
     pass
 
-class Pm5003 (object):
+class Pms5003 (object):
     def __init__(self, device='/dev/ttyAMA0', en_pin=22, reset_pin=27):
         self._serial = serial.Serial(device, baudrate=9600, timeout=5)
         GPIO.setwarnings(False)
@@ -29,24 +29,35 @@ class Pm5003 (object):
         GPIO.output(reset_pin, GPIO.HIGH)
         self._previous_read_time = None
         #TODO use passive mode
+        # #Enter passive mode
+        # passive_cmd = PMS5003_SEQ_START + bytearray(b'\xe1\x00\x00')
+        # check_local = sum(passive_cmd)
+        # check_local %= 2**16
+        # passive_cmd += struct.pack('>H',check_local)
+        # print(passive_cmd)
+        # self._serial.write(passive_cmd)
+        # self._serial.reset_input_buffer()
+        # print(self._serial.in_waiting)
+
+
     
     def read_data(self):
         time_now = time.time()
         if self._previous_read_time is not None:
             elapsed_time = time_now - self._previous_read_time
-            if elapsed_time < PM5003_MIN_PERIOD:
-                raise ValueError('PM5003: Sensor must be read with a period of more than {}, {}s elapsed since last read'.format(PM5003_MIN_PERIOD, elapsed_time))
+            if elapsed_time < PMS5003_MIN_PERIOD:
+                raise ValueError('PMS5003: Sensor must be read with a period of more than {}, {}s elapsed since last read'.format(PMS5003_MIN_PERIOD, elapsed_time))
         self._previous_read_time = time_now
         # Wait for start of packet
-        packet_start = self._serial.read_until(PM5003_SEQ_START, size=100)
-        if len(packet_start) < 2 or packet_start[-2:] != PM5003_SEQ_START:
-            raise CommunicationTimeoutError("PM5003: Could not find sequence start")
+        packet_start = self._serial.read_until(PMS5003_SEQ_START, size=100)
+        if len(packet_start) < 2 or packet_start[-2:] != PMS5003_SEQ_START:
+            raise CommunicationTimeoutError("PMS5003: Could not find sequence start")
         # Initiate check (start of packet already found)
-        check_local = sum(PM5003_SEQ_START)
+        check_local = sum(PMS5003_SEQ_START)
         # Read packet frame lenght
         frame_length_raw = bytearray(self._serial.read(2))
         if len(frame_length_raw) != 2:
-            raise CommunicationTimeoutError("PM5003: Did not receive bytes indicating length of packet to read")
+            raise CommunicationTimeoutError("PMS5003: Did not receive bytes indicating length of packet to read")
         check_local += sum(frame_length_raw)
         frame_length = struct.unpack(">H", frame_length_raw)[0]
 
@@ -77,13 +88,13 @@ class Pm5003 (object):
         #>2.5um in 0.1L air,
         #>5.0um in 0.1L air,
         #>10um in 0.1L air
-        return tuple(data[:-1]) # Don't return resrved data
+        return tuple(data[:-1]) # Don't return reserved data
 
 if __name__ == '__main__':
-    pm5003 = Pm5003()
+    pms5003 = Pms5003()
     # ctrl+c to close
     while True:
-        data = pm5003.read_data()
+        data = pms5003.read_data()
         print('''
 PM1.0 ug/m3 (CF=1)  : {} 
 PM2.5 ug/m3 (CF=1)  : {} 

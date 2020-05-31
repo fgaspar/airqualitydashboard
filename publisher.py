@@ -2,7 +2,7 @@
 
 import time
 import threading
-from sensors import pm5003
+from sensors import pms5003, bme680, scd30
 from influxdb import InfluxDBClient
 
 DBG = True
@@ -41,10 +41,12 @@ def main():
         use_db_dbg(db_client)
     else:
         use_db_main(db_client)
-    threading.Thread(target=push_pm5003, args=(db_client, db_lock, PERIOD,)).start()
+    threading.Thread(target=push_pms5003, args=(db_client, db_lock, PERIOD,)).start()
+    threading.Thread(target=push_bme680,  args=(db_client, db_lock, PERIOD,)).start()
+    threading.Thread(target=push_scd30,   args=(db_client, db_lock, PERIOD,)).start()
 
-def push_pm5003(db_client, db_lock, period):
-    sensor = pm5003.Pm5003()
+def push_pms5003(db_client, db_lock, period):
+    sensor = pms5003.Pms5003()
     while True:
         data = sensor.read_data()
         fields = {
@@ -64,6 +66,33 @@ def push_pm5003(db_client, db_lock, period):
             push_data(db_client, 'pm5003', fields)
         time.sleep(period)
 
+def push_bme680(db_client, db_lock, period):
+    sensor = bme680.Bme680()
+    while True:
+        data = sensor.read_data()
+        fields = {
+            'IAQ accuracy' : data[0],
+            'IAQ'          : data[1],
+            'T degC'       : data[2],
+            'H %rH'        : data[3],
+            'P hPa'        : data[4],
+            'eCO2 ppm'     : data[5],
+            'bVOCe ppm'    : data[6]}
+        with db_lock:
+            push_data(db_client, 'bme680', fields)
+        time.sleep(period)
+
+def push_scd30(db_client, db_lock, period):
+    sensor = scd30.Scd30()
+    while True:
+        data = sensor.read_data()
+        fields = {
+            'C02 PPM' : data[0],
+            'T degC'  : data[1],
+            'Hum %rH' : data[2]}
+        with db_lock:
+            push_data(db_client, 'scd30', fields)
+        time.sleep(period)
 
 if __name__ == '__main__':
     main()

@@ -49,7 +49,7 @@ def main():
         use_db_main(db_client)
     threading.Thread(target=push_pms5003, args=(db_client, db_lock, PERIOD,)).start()
     threading.Thread(target=push_bme680,  args=(db_client, db_lock, PERIOD,)).start()
-    threading.Thread(target=push_scd30,   args=(db_client, db_lock, PERIOD,)).start()
+    #threading.Thread(target=push_scd30,   args=(db_client, db_lock, PERIOD,)).start()
 
 def push_pms5003(db_client, db_lock, period):
     sensor = pms5003.Pms5003()
@@ -74,7 +74,7 @@ def push_pms5003(db_client, db_lock, period):
 def push_bme680(db_client, db_lock, period):
     sensor = bme680.Bme680()
     while True:
-        data = sensor.read_data()
+        data = sensor.read_data(interval = period)
         fields = {
             'IAQ accuracy' : data[0],
             'IAQ'          : data[1],
@@ -85,19 +85,17 @@ def push_bme680(db_client, db_lock, period):
             'bVOCe ppm'    : data[6]}
         with db_lock:
             push_data(db_client, 'bme680', fields)
-        time.sleep(period)
 
 def push_scd30(db_client, db_lock, period):
     sensor = scd30.Scd30(interval = 10)
     while True:
-        data = sensor.read_data()
+        data = sensor.read_data(interval = period)
         fields = {
             'C02 PPM' : data[0],
             'T degC'  : data[1],
             'Hum %rH' : data[2]}
         with db_lock:
             push_data(db_client, 'scd30', fields)
-        time.sleep(period)
 
 if __name__ == '__main__':
     main()

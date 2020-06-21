@@ -14,28 +14,30 @@ class CommunicationError(RuntimeError):
     pass
 
 class Scd30 (object):
-    def __init__(self, pigpio_addr='127.0.0.1', i2c_addr = 0x61, i2c_bus = 1, interval = 2, pressure = 1014):
+    def __init__(self, pigpio_addr='127.0.0.1', i2c_addr = 0x61, i2c_bus = 1, interval = 2, pressure = 1000):
         if os.geteuid() != 0:
             raise RuntimeError('SCD30: Must be run as root to modify I2C speed')
         i2c1_set_clkt_tout_path = os.path.join(os.path.dirname(__file__), 'scd30_auxbin', 'i2c1_set_clkt_tout')
         if subprocess.run([i2c1_set_clkt_tout_path, '20000'], capture_output=True, text=True).returncode != 0:
             raise RuntimeError('SCD30: Failed to set i2c clock')
+        time.sleep(0.1)
         self._pi = pigpio.pi(pigpio_addr)
         if not self._pi.connected:
             raise CommunicationTimeoutError('SCD30: Failed to connecet to pigpio at "{}"'.format(pigpio_addr))
         self._h = self._pi.i2c_open(i2c_bus, i2c_addr)
         self._crcf = crcmod.mkCrcFun(0x131, 0xFF, False)
-        self.soft_reset()
-        time.sleep(0.2)
+
+        time.sleep(0.1)
+
         if self.get_measurement_interval() != interval:
             self.set_measurement_interval(interval)
+        time.sleep(0.1)
+        if self.get_self_calibration() != 0:
+            self.set_self_calibration(0)
+        time.sleep(0.1)
 
-        if self.get_self_calibration() != 1:
-            self.set_self_calibration(1)
-        print(self.get_measurement_interval())
-        print(self.get_self_calibration())
-        #self.stop_continuous_mode()
         self.set_continuous_mode(pressure)
+        time.sleep(0.1)
 
 #TODO make something like this work
 #    def __del__(self):
@@ -47,6 +49,7 @@ class Scd30 (object):
 
         while not self._get_data_ready():
             time.sleep(0.2)
+
         self._pi.i2c_write_device(self._h, b'\x03\x00')
         bytes_expected = 18
         (count, data) = self._pi.i2c_read_device(self._h, bytes_expected)

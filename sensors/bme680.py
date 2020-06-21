@@ -22,7 +22,7 @@ class Bme680 (object):
         threading.Thread(target=self._update_data).start()
     
     def _update_data(self):
-        p = subprocess.Popen(['./bsec_bme680'], cwd=os.path.dirname(__file__)+'/../../bme680/bsec_bme680_linux/', stdout=subprocess.PIPE, text=True)
+        p = subprocess.Popen(['./bsec_bme680'], cwd=os.path.dirname(__file__)+'/bme680_auxbin/bsec_bme680_linux/', stdout=subprocess.PIPE, text=True)
         regex = re.compile(r'\((\d)\).*?: ([\d.]+).*?: ([\d.]+).*?: ([\d.]+).*?: ([\d.]+).*?: ([\d.]+).*?: ([\d.]+).*?: ([\d.]+).*?: ([\d.]+)')
         for line in p.stdout:
             result = regex.search(line)
@@ -38,8 +38,10 @@ class Bme680 (object):
                 self._eco2 = result[8]
                 self._bvoce = result[9]
 
-    def read_data(self):
+    def read_data(self, interval = 0):
         ret = None
+        time.sleep(interval)
+
         while True:
             with self._data_lock:
                 if self._ready:
@@ -58,7 +60,7 @@ if __name__ == '__main__':
     bme680 = Bme680()
     # ctrl+c to close
     while True:
-        data = bme680.read_data()
+        data = bme680.read_data(interval = 5)
         print('''
 IAQ accuracy : {} 
 IAQ          : {} 
@@ -68,5 +70,4 @@ P hPa        : {}
 eCO2 ppm     : {} 
 bVOCe ppm    : {} 
 '''.format(*data))
-        time.sleep(4)
         

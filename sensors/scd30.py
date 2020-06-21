@@ -14,7 +14,7 @@ class CommunicationError(RuntimeError):
     pass
 
 class Scd30 (object):
-    def __init__(self, pigpio_addr='127.0.0.1', i2c_addr = 0x61, i2c_bus = 1, interval = 2, pressure = 1000):
+    def __init__(self, pigpio_addr='127.0.0.1', i2c_addr = 0x61, i2c_bus = 1, interval = 2, pressure = 1014):
         if os.geteuid() != 0:
             raise RuntimeError('SCD30: Must be run as root to modify I2C speed')
         i2c1_set_clkt_tout_path = os.path.join(os.path.dirname(__file__), 'scd30_auxbin', 'i2c1_set_clkt_tout')
@@ -25,18 +25,26 @@ class Scd30 (object):
             raise CommunicationTimeoutError('SCD30: Failed to connecet to pigpio at "{}"'.format(pigpio_addr))
         self._h = self._pi.i2c_open(i2c_bus, i2c_addr)
         self._crcf = crcmod.mkCrcFun(0x131, 0xFF, False)
+        self.soft_reset()
+        time.sleep(0.2)
         if self.get_measurement_interval() != interval:
             self.set_measurement_interval(interval)
+
+        if self.get_self_calibration() != 1:
+            self.set_self_calibration(1)
+        print(self.get_measurement_interval())
+        print(self.get_self_calibration())
+        #self.stop_continuous_mode()
         self.set_continuous_mode(pressure)
-        #TODO turn on auto calibrate
-        #exit(1)pigs
 
 #TODO make something like this work
 #    def __del__(self):
 #        print(self._h)
 #        self._pi.i2c_close(self._h)
 
-    def read_data(self):
+    def read_data(self, interval = 0):
+        time.sleep(interval)
+
         while not self._get_data_ready():
             time.sleep(0.2)
         self._pi.i2c_write_device(self._h, b'\x03\x00')
@@ -86,6 +94,27 @@ class Scd30 (object):
         if safe and (self.get_measurement_interval() != interval):
             RuntimeError('SCD30: Failed to set measurement interval')
 
+    def get_self_calibration(self):
+        self._pi.i2c_write_device(self._h, b'\x53\x06')
+        bytes_expected = 3
+        (count, data) = self._pi.i2c_read_device(self._h, bytes_expected)
+        if count != bytes_expected:
+            raise CommunicationError('SCD30: Did not receive expected number of bytes from interval read')
+        raw_data = self._data_check(data, bytes_expected)
+        return struct.unpack('>H', raw_data)[0]
+
+    def set_self_calibration(self, value, safe = True):
+        cmd = b'\x53\x06'
+        value_to_write = 0
+        if value:
+            value_to_write = 1
+        value_to_write_b = struct.pack('>H', value_to_write)
+        crc_b =  struct.pack('>B', self._crcf(value_to_write_b))
+        data_crc = value_to_write_b+crc_b
+        self._pi.i2c_write_device(self._h, cmd+data_crc)
+        if safe and (self.get_self_calibration() != value_to_write):
+            RuntimeError('SCD30: Failed to set measurement interval')
+
     def set_continuous_mode(self, pressure):
         cmd = b'\x00\x10'
         pressure_b = struct.pack('>H', pressure)
@@ -93,15 +122,22 @@ class Scd30 (object):
         data_crc = pressure_b+crc_b
         self._pi.i2c_write_device(self._h, cmd+data_crc)
 
+    def stop_continuous_mode(self):
+        cmd = b'\x01\x04'
+        self._pi.i2c_write_device(self._h, cmd)
+
+    def soft_reset(self):
+        cmd = b'\xd3\x04'
+        self._pi.i2c_write_device(self._h, cmd)
+
 if __name__ == '__main__':
     scd30 = Scd30()
     # ctrl+c to close
     while True:
-        data = scd30.read_data()
+        data = scd30.read_data(interval = 5)
         print('''
 C02 PPM : {} 
 T degC  : {} 
 Hum %rH : {} 
 '''.format(*data))
-        time.sleep(4)
         

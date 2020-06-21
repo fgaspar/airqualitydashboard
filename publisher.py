@@ -5,22 +5,28 @@ import threading
 from sensors import pms5003, bme680, scd30
 from influxdb import InfluxDBClient
 
-DBG = True
-PERIOD = 5
+DBG = False
+PERIOD = 300
 
 def use_db_dbg(db_client):
     db_name = 'sensors_dbg'
     if not db_name in [d['name'] for d in db_client.get_list_database()]:
         db_client.create_database(db_name)
+        db_client.switch_database(db_name)
         db_client.create_retention_policy('short', '1h', '1', default=True)
-    db_client.switch_database(db_name)
+    else:
+        db_client.switch_database(db_name)
+
+
 
 def use_db_main(db_client):
     db_name = 'sensors'
     if not db_name in [d['name'] for d in db_client.get_list_database()]:
         db_client.create_database(db_name)
-        db_client.create_retention_policy('long', '5y', '1', default=True)
-    db_client.switch_database(db_name)
+        db_client.switch_database(db_name)
+        db_client.create_retention_policy('long', '260w', '1', default=True)
+    else:
+        db_client.switch_database(db_name)
 
 
 def push_data(db_client, sensor, fields, tags={}):
@@ -48,7 +54,7 @@ def main():
 def push_pms5003(db_client, db_lock, period):
     sensor = pms5003.Pms5003()
     while True:
-        data = sensor.read_data()
+        data = sensor.read_data(interval = period)
         fields = {
             'PM1.0 ug/m3 (CF=1)': data[0], 
             'PM2.5 ug/m3 (CF=1)': data[1], 
@@ -64,7 +70,6 @@ def push_pms5003(db_client, db_lock, period):
             '>10um in 0.1L air': data[11]}
         with db_lock:
             push_data(db_client, 'pm5003', fields)
-        time.sleep(period)
 
 def push_bme680(db_client, db_lock, period):
     sensor = bme680.Bme680()
@@ -83,7 +88,7 @@ def push_bme680(db_client, db_lock, period):
         time.sleep(period)
 
 def push_scd30(db_client, db_lock, period):
-    sensor = scd30.Scd30()
+    sensor = scd30.Scd30(interval = 10)
     while True:
         data = sensor.read_data()
         fields = {
